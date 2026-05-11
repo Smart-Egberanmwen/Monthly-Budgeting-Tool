@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Family Budget Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#EEEBE3;font-family:'DM Sans',sans-serif;min-height:100vh}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:#1B4332;border-radius:3px}
+input[type=number]::-webkit-inner-spin-button{opacity:.4}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+const N=v=>`₦${Number(v||0).toLocaleString('en-NG')}`;
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const NOW=new Date();
+const PCT="pct",FIXED="fixed";
+const calc=(row,inc)=>row.t===PCT?Math.round(inc*row.v/100):Number(row.v)||0;
+let _u=9000;const uid=()=>`r${_u++}`;
+const hex6=(h,a)=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;};
+const LS={
+  get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
+  set:(k,v)=>{try{localStorage.setItem(k,typeof v==='string'?v:JSON.stringify(v));}catch{}},
+};
+
+const CATS={
+  faith:    {lb:"🙏 Faith & Giving",     cl:"#7C3AED"},
+  food:     {lb:"🛒 Food & Groceries",   cl:"#059669"},
+  home:     {lb:"🏠 Home & Utilities",   cl:"#0891B2"},
+  transport:{lb:"🚌 Transportation",      cl:"#D97706"},
+  data:     {lb:"📱 Data & Comms",       cl:"#2563EB"},
+  family:   {lb:"❤️ Family Support",     cl:"#DB2777"},
+  school:   {lb:"🎒 School Fees Pot",    cl:"#B45309"},
+  children: {lb:"🧸 Children's Needs",   cl:"#0D9488"},
+  invest:   {lb:"📈 Investment",         cl:"#16A34A"},
+  emergency:{lb:"🛡️ Emergency Fund",    cl:"#4F46E5"},
+  pocket:   {lb:"💳 Pocket Money",      cl:"#9333EA"},
+  clothing: {lb:"👔 Clothing & Care",   cl:"#C2410C"},
+  health:   {lb:"🏥 Health & Medical",  cl:"#DC2626"},
+  david:    {lb:"👶 David's Legacy",    cl:"#1B4332"},
+  misc:     {lb:"🎯 Buffer",            cl:"#6B7280"},
+  xmas:     {lb:"🎄 Christmas & Gifts", cl:"#B91C1C"},
+};
+const CAT_ORDER=["faith","food","home","transport","data","family","school","children","invest","emergency","pocket","clothing","health","david","misc"];
+
+const DR=[
+  {id:"tithe",  c:"faith",    n:"Tithe",                    t:PCT,  v:10,    nt:"10% of income — auto-updates when income changes ✨"},
+  {id:"offer",  c:"faith",    n:"Weekly Offering (×4 wks)", t:FIXED,v:16000, nt:"₦4,000 × 4 Sundays"},
+  {id:"chtpt",  c:"faith",    n:"Church Transport (×4 wks)",t:FIXED,v:12000, nt:"₦3,000/week × 4 weeks"},
+  {id:"groc",   c:"food",     n:"Food & Groceries",         t:FIXED,v:200000,nt:"Reduced ₦50k from previous — bulk-buy staples to save more"},
+  {id:"elec",   c:"home",     n:"Electricity (NEPA/PHCN)", t:FIXED,v:20000, nt:"Light bill"},
+  {id:"water",  c:"home",     n:"Water Bill",               t:FIXED,v:10000, nt:"Monthly water supply"},
+  {id:"waste",  c:"home",     n:"Waste Disposal",           t:FIXED,v:4000,  nt:"Sanitation / waste management"},
+  {id:"gas",    c:"home",     n:"Cooking Gas",              t:FIXED,v:10000, nt:"Monthly gas refills"},
+  {id:"hhold",  c:"home",     n:"Household Supplies",       t:FIXED,v:10000, nt:"Cleaning items, toiletries, sundries"},
+  {id:"wktpt",  c:"transport",n:"Work Commute (×4 wks)",   t:FIXED,v:10000, nt:"₦2,500/week × 4 weeks"},
+  {id:"data",   c:"data",     n:"Data / Airtime",           t:FIXED,v:20000, nt:"Reduced from ₦30k — compare MTN/Airtel/Glo/9mobile"},
+  {id:"mil",    c:"family",   n:"Mother-in-Law Upkeep",     t:FIXED,v:15000, nt:"Monthly support"},
+  {id:"mom",    c:"family",   n:"My Mom's Upkeep",          t:FIXED,v:15000, nt:"Monthly support for Mama"},
+  {id:"bro",    c:"family",   n:"Younger Brother (School)", t:FIXED,v:10000, nt:"Education support — investing in his future"},
+  {id:"schsv",  c:"school",   n:"Son's School Fees (Save)", t:FIXED,v:100000,nt:"₦100k/month → ₦300k ready every 3 months (per term)"},
+  {id:"sdaily", c:"children", n:"David's Daily Needs",      t:FIXED,v:8000,  nt:"Snacks, books, school essentials, treats"},
+  {id:"sgifts", c:"children", n:"David's Clothes & Gifts",  t:FIXED,v:7000,  nt:"Toys, seasonal clothing, birthday gifts"},
+  {id:"inv",    c:"invest",   n:"Monthly Investment",       t:FIXED,v:40000, nt:"Risevest / PiggyVest / Cowrywise / stocks"},
+  {id:"emg",    c:"emergency",n:"Emergency Savings",        t:FIXED,v:20000, nt:"Target: ₦200k cushion — 3 months of essentials"},
+  {id:"wpkt",   c:"pocket",   n:"Wife's Pocket Money",      t:FIXED,v:20000, nt:"Hair, personal shopping, self-care, outings"},
+  {id:"mpkt",   c:"pocket",   n:"My Pocket Money",          t:FIXED,v:15000, nt:"Personal expenses, treats, outings"},
+  {id:"cloth",  c:"clothing", n:"Family Clothing",          t:FIXED,v:10000, nt:"Monthly clothes budget"},
+  {id:"groom",  c:"clothing", n:"Grooming & Personal Care", t:FIXED,v:5000,  nt:"Haircuts, skincare, toiletries"},
+  {id:"hlth",   c:"health",   n:"Health & Medical Fund",    t:FIXED,v:10000, nt:"Medications, checkups — redirect to Christmas in December"},
+  {id:"davs",   c:"david",    n:"David's Legacy Savings",   t:FIXED,v:10000, nt:"Monthly — auto-grows with salary. For David & future siblings 🌱"},
+  {id:"buf",    c:"misc",     n:"Flex Buffer / Misc",       t:FIXED,v:6000,  nt:"Unexpected expenses — don't touch unless truly needed"},
+];
+
+const DX=[
+  {id:"xp",c:"xmas",n:"Christmas Gifts — Both Parents",  t:FIXED,v:30000,nt:"Meaningful gifts for parents & in-laws"},
+  {id:"xc",c:"xmas",n:"Cash Gifts to Extended Family",   t:FIXED,v:20000,nt:"Seasonal cash gifts"},
+  {id:"xk",c:"xmas",n:"David's Christmas + Celebration", t:FIXED,v:15000,nt:"Toys, outfits, festive celebration"},
+];
+
+const DD={birthYear:2020,targetAge:18,monthlyFixed:10000,linkToIncome:true,incPct:(10000/670000)*100,totalSaved:0};
+const DG={schoolFees:0,termsPaid:0,emergency:0,emergTarget:200000,investment:0,investMonths:0};
+
+function App(){
+  const [income,setIncome]=useState(()=>LS.get("fbs-income")||670000);
+  const [rows,setRows]=useState(()=>LS.get("fbs-rows")||DR);
+  const [xrows,setXrows]=useState(()=>LS.get("fbs-xrows")||DX);
+  const [showX,setShowX]=useState(()=>LS.get("fbs-showx")||false);
+  const [month,setMonth]=useState(NOW.getMonth());
+  const [year,setYear]=useState(NOW.getFullYear());
+  const [tab,setTab]=useState("sheet");
+  const [david,setDavid]=useState(()=>LS.get("fbs-david")||DD);
+  const [goals,setGoals]=useState(()=>LS.get("fbs-goals")||DG);
+  const [toast,setToast]=useState(null);
+  const [incEdit,setIncEdit]=useState(false);
+  const [incTmp,setIncTmp]=useState("");
+
+  useEffect(()=>{LS.set("fbs-income",income);},[income]);
+  useEffect(()=>{LS.set("fbs-rows",rows);},[rows]);
+  useEffect(()=>{LS.set("fbs-xrows",xrows);},[xrows]);
+  useEffect(()=>{LS.set("fbs-showx",showX);},[showX]);
+  useEffect(()=>{LS.set("fbs-david",david);},[david]);
+  useEffect(()=>{LS.set("fbs-goals",goals);},[goals]);
+
+  const notify=msg=>{setToast(msg);setTimeout(()=>setToast(null),3200);};
+  const applyIncome=v=>{
+    if(david.linkToIncome) setDavid(d=>({...d,monthlyFixed:Math.round(v*d.incPct/100)}));
+    setIncome(v);
+    notify(`✅ Income → ${N(v)}. Tithe & % items auto-recalculated!`);
+  };
+
+  const allRows=showX?[...rows,...xrows]:rows;
+  const total=allRows.reduce((s,r)=>s+calc(r,income),0);
+  const bal=income-total;
+
+  const TABS=[{id:"sheet",l:"📋 Budget Sheet"},{id:"david",l:"👶 David's Legacy"},{id:"goals",l:"🎯 Savings Goals"},{id:"tips",l:"💡 Smart Tips"}];
+
+  return (
+    <div style={{fontFamily:"'DM Sans',sans-serif",background:"#EEEBE3",minHeight:"100vh",paddingBottom:60}}>
+
+      {/* HEADER */}
+      <header style={{background:"linear-gradient(135deg,#1B4332 0%,#2D6A4F 60%,#1B4332 100%)",padding:"20px 20px 0",position:"sticky",top:0,zIndex:100,boxShadow:"0 4px 24px rgba(0,0,0,0.35)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12,maxWidth:1080,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <div style={{width:50,height:50,background:"#D4A017",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:"#1B4332",flexShrink:0}}>₦</div>
+            <div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:"#fff"}}>Family Budget Sheet</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.55)",marginTop:2}}>Live · Dynamic · Formula-Driven · Always Editable</div>
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Monthly Income — click to edit ✏️</div>
+            {incEdit
+              ? <input autoFocus type="number" value={incTmp} onChange={e=>setIncTmp(e.target.value)}
+                  onBlur={()=>{if(+incTmp>0)applyIncome(+incTmp);setIncEdit(false);}}
+                  onKeyDown={e=>{if(e.key==="Enter"&&+incTmp>0){applyIncome(+incTmp);setIncEdit(false);}if(e.key==="Escape")setIncEdit(false);}}
+                  style={{fontFamily:"'DM Mono',monospace",fontSize:24,fontWeight:700,color:"#D4A017",background:"transparent",border:"none",borderBottom:"2px solid #D4A017",outline:"none",width:220,textAlign:"right"}}/>
+              : <div onClick={()=>{setIncTmp(income);setIncEdit(true);}} style={{fontFamily:"'DM Mono',monospace",fontSize:26,fontWeight:700,color:"#D4A017",cursor:"pointer"}}>{N(income)}</div>
+            }
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",maxWidth:1080,margin:"12px auto 0"}}>
+          <Pill l="Budgeted" v={N(total)} c="#D4A017"/>
+          <Pill l="Balance"  v={N(bal)} c={bal>=0?"#4ADE80":"#F87171"}/>
+          <Pill l="Month"    v={`${MONTHS[month].slice(0,3)} ${year}`} c="#fff"/>
+          {month===11&&!showX&&<button onClick={()=>setShowX(true)} style={{padding:"5px 14px",background:"#B91C1C",border:"none",color:"#fff",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>🎄 Enable Christmas Budget</button>}
+          {showX&&<button onClick={()=>setShowX(false)} style={{padding:"5px 14px",background:"#7F1D1D",border:"none",color:"#fff",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>✕ Hide Christmas</button>}
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"10px 0",marginTop:8}}>
+          <button onClick={()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);}} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",padding:"5px 18px",borderRadius:6,cursor:"pointer",fontSize:14}}>‹ Prev</button>
+          <span style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:"#fff",fontWeight:600,minWidth:180,textAlign:"center"}}>{MONTHS[month]} {year}</span>
+          <button onClick={()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);}} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",padding:"5px 18px",borderRadius:6,cursor:"pointer",fontSize:14}}>Next ›</button>
+        </div>
+      </header>
+
+      {/* TABS */}
+      <div style={{display:"flex",background:"#fff",borderBottom:"2px solid #E5E7EB",maxWidth:1080,margin:"0 auto",overflowX:"auto"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"13px 22px",border:"none",background:"transparent",fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?"#1B4332":"#888",cursor:"pointer",borderBottom:tab===t.id?"3px solid #1B4332":"3px solid transparent",whiteSpace:"nowrap"}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{maxWidth:1080,margin:"0 auto",padding:"18px 16px"}}>
+        {tab==="sheet"&&<SheetTab income={income} rows={rows} setRows={setRows} xrows={xrows} setXrows={setXrows} showX={showX} total={total} bal={bal} notify={notify}/>}
+        {tab==="david"&&<DavidTab david={david} setDavid={setDavid} income={income} notify={notify}/>}
+        {tab==="goals"&&<GoalsTab goals={goals} setGoals={setGoals} notify={notify}/>}
+        {tab==="tips" &&<TipsTab/>}
+      </div>
+
+      {toast&&<div style={{position:"fixed",bottom:28,right:24,background:"#1B4332",color:"#fff",padding:"12px 22px",borderRadius:10,fontFamily:"'DM Sans',sans-serif",fontSize:14,fontWeight:600,zIndex:9999,boxShadow:"0 6px 24px rgba(0,0,0,0.3)",maxWidth:340}}>{toast}</div>}
+      <div style={{textAlign:"center",fontSize:11,color:"#aaa",padding:"14px 16px 0"}}>💚 All data saved privately in your browser · Built for your family with love</div>
+    </div>
+  );
+}
+
+function SheetTab({income,rows,setRows,xrows,setXrows,showX,total,bal,notify}){
+  const [ec,setEc]=useState(null);
+  const [ev,setEv]=useState("");
+  const [addCat,setAddCat]=useState(null);
+  const [newNm,setNewNm]=useState("");
+
+  const getRows=k=>k==="xmas"?xrows:rows.filter(r=>r.c===k);
+  const setter=id=>xrows.some(r=>r.id===id)?setXrows:setRows;
+
+  const startEdit=(id,f,cur)=>{setEc({id,f});setEv(String(cur));};
+  const commit=()=>{
+    if(!ec)return;
+    const{id,f}=ec;
+    setter(id)(p=>p.map(r=>{
+      if(r.id!==id)return r;
+      if(f==="n")return{...r,n:ev.trim()||r.n};
+      if(f==="nt")return{...r,nt:ev};
+      if(f==="v"){const x=parseFloat(ev);return(isNaN(x)||x<0)?r:{...r,v:x};}
+      return r;
+    }));
+    setEc(null);notify("✅ Saved!");
+  };
+
+  const toggleType=id=>{
+    setter(id)(p=>p.map(r=>{
+      if(r.id!==id)return r;
+      if(r.t===PCT)return{...r,t:FIXED,v:calc(r,income)};
+      return{...r,t:PCT,v:parseFloat(((r.v/income)*100).toFixed(2))};
+    }));
+    notify("Formula type toggled!");
+  };
+
+  const delRow=id=>{
+    if(!window.confirm("Delete this row?"))return;
+    setRows(p=>p.filter(r=>r.id!==id));
+    setXrows(p=>p.filter(r=>r.id!==id));
+    notify("Row deleted");
+  };
+
+  const addRow=k=>{
+    if(!newNm.trim())return;
+    const row={id:uid(),c:k,n:newNm.trim(),t:FIXED,v:0,nt:""};
+    if(k==="xmas")setXrows(p=>[...p,row]);else setRows(p=>[...p,row]);
+    setNewNm("");setAddCat(null);notify("✅ Row added!");
+  };
+
+  const activeCats=[...CAT_ORDER,...(showX?["xmas"]:[])];
+
+  return(
+    <div>
+      <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:14,border:"1px solid #E5E7EB",fontSize:13,color:"#444",lineHeight:1.8}}>
+        <b style={{color:"#1B4332"}}>How to use:</b> Click any <code style={{background:"#F3F4F6",padding:"1px 6px",borderRadius:4,fontFamily:"monospace",fontSize:12}}>item name</code>, <code style={{background:"#F3F4F6",padding:"1px 6px",borderRadius:4,fontFamily:"monospace",fontSize:12}}>amount</code>, or <code style={{background:"#F3F4F6",padding:"1px 6px",borderRadius:4,fontFamily:"monospace",fontSize:12}}>note</code> to edit inline.&nbsp;
+        <span style={{background:"#EEF2FF",padding:"2px 8px",borderRadius:4,color:"#4F46E5",fontWeight:700,fontSize:11}}>% inc</span> = formula-linked to income (auto-recalculates).&nbsp;
+        <span style={{background:"#F0FDF4",padding:"2px 8px",borderRadius:4,color:"#16A34A",fontWeight:700,fontSize:11}}>₦ Fixed</span> = flat amount. Click badge to toggle. Use <b>+ Add row</b> to add new lines anywhere.
+      </div>
+
+      <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 20px rgba(0,0,0,0.08)",overflow:"hidden"}}>
+        <div style={{display:"flex",background:"#1B4332",padding:"10px 16px",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:.9}}>
+          <div style={{width:188}}>Budget Item</div>
+          <div style={{width:108}}>Formula</div>
+          <div style={{width:130,textAlign:"right"}}>Monthly ₦</div>
+          <div style={{flex:1,paddingLeft:16}}>Note</div>
+          <div style={{width:34}}/>
+        </div>
+
+        {activeCats.map(k=>{
+          const cfg=CATS[k];if(!cfg)return null;
+          const cRows=getRows(k);
+          const cTot=cRows.reduce((s,r)=>s+calc(r,income),0);
+          const cPct=income>0?((cTot/income)*100).toFixed(1):"0.0";
+          return(
+            <div key={k}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 16px",borderBottom:"1px solid #E5E7EB",borderLeft:`5px solid ${cfg.cl}`,background:hex6(cfg.cl,.06)}}>
+                <span style={{fontWeight:700,fontSize:13,color:cfg.cl}}>{cfg.lb}</span>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{height:5,width:70,background:"#E5E7EB",borderRadius:99,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${Math.min(100,parseFloat(cPct))}%`,background:cfg.cl,borderRadius:99}}/>
+                  </div>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:cfg.cl,fontWeight:700}}>{N(cTot)} <span style={{fontSize:11,color:"#999",fontWeight:400}}>({cPct}%)</span></span>
+                </div>
+              </div>
+
+              {cRows.map(row=>{
+                const amt=calc(row,income);
+                const eN=ec?.id===row.id&&ec?.f==="n";
+                const eV=ec?.id===row.id&&ec?.f==="v";
+                const eNt=ec?.id===row.id&&ec?.f==="nt";
+                return(
+                  <div key={row.id} style={{display:"flex",alignItems:"center",padding:"7px 16px",borderBottom:"1px solid #F5F5F5",minHeight:42}}>
+                    <div style={{width:188,paddingRight:8}}>
+                      {eN?<CInp val={ev} onChange={setEv} onDone={commit}/>
+                        :<span onClick={()=>startEdit(row.id,"n",row.n)} style={{fontSize:13,fontWeight:500,color:"#111",cursor:"pointer",borderBottom:"1px dotted #ccc"}}>{row.n}</span>}
+                    </div>
+                    <div style={{width:108}}>
+                      <button onClick={()=>toggleType(row.id)} title="Toggle % / fixed"
+                        style={{padding:"3px 9px",borderRadius:20,fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700,cursor:"pointer",border:"1px solid",...(row.t===PCT?{background:"#EEF2FF",color:"#4F46E5",borderColor:"#C7D2FE"}:{background:"#F0FDF4",color:"#16A34A",borderColor:"#BBF7D0"})}}>
+                        {row.t===PCT?`${row.v}% inc`:"₦ Fixed"}
+                      </button>
+                    </div>
+                    <div style={{width:130,textAlign:"right"}}>
+                      {eV?<CInp type="number" val={ev} onChange={setEv} onDone={commit} style={{width:100,textAlign:"right"}}/>
+                        :<span onClick={()=>startEdit(row.id,"v",row.v)} style={{fontFamily:"'DM Mono',monospace",fontSize:14,fontWeight:700,color:cfg.cl,cursor:"pointer"}}>
+                          {N(amt)}{row.t===PCT&&<span style={{fontSize:10,color:"#bbb"}}> ∞</span>}
+                        </span>}
+                    </div>
+                    <div style={{flex:1,paddingLeft:16}}>
+                      {eNt?<CInp val={ev} onChange={setEv} onDone={commit} style={{width:"95%"}}/>
+                        :<span onClick={()=>startEdit(row.id,"nt",row.nt)} style={{fontSize:11,color:"#bbb",cursor:"pointer",fontStyle:"italic"}}>{row.nt||"click to add note..."}</span>}
+                    </div>
+                    <div style={{width:34,textAlign:"center"}}>
+                      <button onClick={()=>delRow(row.id)} style={{background:"transparent",border:"1px solid #eee",color:"#DC2626",padding:"2px 7px",borderRadius:5,cursor:"pointer",fontSize:12}}>✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {addCat===k
+                ?<div style={{display:"flex",gap:8,padding:"8px 16px",background:"#FFFBEB",borderBottom:"1px solid #E5E7EB",alignItems:"center"}}>
+                  <input autoFocus style={{flex:1,padding:"5px 10px",border:"2px solid #1B4332",borderRadius:6,fontSize:13,outline:"none"}} placeholder={`New item for ${cfg.lb}...`} value={newNm} onChange={e=>setNewNm(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addRow(k);if(e.key==="Escape"){setAddCat(null);setNewNm("");}}}/>
+                  <button onClick={()=>addRow(k)} style={{padding:"5px 16px",background:"#1B4332",color:"#fff",border:"none",borderRadius:7,fontSize:13,fontWeight:600,cursor:"pointer"}}>Add</button>
+                  <button onClick={()=>{setAddCat(null);setNewNm("");}} style={{padding:"5px 10px",background:"transparent",border:"1px solid #eee",color:"#888",borderRadius:7,cursor:"pointer",fontSize:13}}>✕</button>
+                </div>
+                :<div onClick={()=>setAddCat(k)} style={{padding:"7px 16px",fontSize:12,color:"#16A34A",cursor:"pointer",borderBottom:"1px dashed #E5E7EB",fontWeight:600}}>+ Add row to {cfg.lb}</div>
+              }
+            </div>
+          );
+        })}
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"#F0F9F4",borderTop:"2px solid #1B4332"}}>
+          <span style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:"#1B4332"}}>📊 TOTAL BUDGETED</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:20,fontWeight:700,color:"#1B4332"}}>{N(total)}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 18px",background:bal>=0?"#F0FDF4":"#FEF2F2"}}>
+          <span style={{fontSize:13,color:bal>=0?"#166534":"#991B1B"}}>
+            {bal>=0?`✅ ${N(bal)} unallocated — add to investment or David's fund!`:`⚠️ Over budget by ${N(Math.abs(bal))} — reduce items or increase income`}
+          </span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:18,fontWeight:700,color:bal>=0?"#16A34A":"#DC2626"}}>{bal>=0?"+":""}{N(bal)}</span>
+        </div>
+      </div>
+
+      {showX&&<div style={{background:"#FFF1F2",border:"1px solid #FECDD3",borderRadius:10,padding:"12px 16px",marginTop:12,fontSize:13,color:"#9F1239",lineHeight:1.7}}>
+        🎄 <b>December Christmas Mode active.</b> Your health budget (₦10k) can be redirected here. Tip: Save an extra ₦15–20k in Oct & Nov so December doesn't stress you.
+      </div>}
+    </div>
+  );
+}
+
+function DavidTab({david,setDavid,income,notify}){
+  const [add,setAdd]=useState("");
+  const upd=(k,v)=>setDavid(d=>({...d,[k]:v}));
+  const age=NOW.getFullYear()-david.birthYear;
+  const mc=david.linkToIncome?Math.round(income*david.incPct/100):david.monthlyFixed;
+  const mTo=a=>Math.max(0,(david.birthYear+a-NOW.getFullYear())*12-NOW.getMonth());
+  const fv=(pv,pmt,rate,n)=>{if(n<=0)return pv;if(rate===0)return pv+pmt*n;const r=rate/12;return pv*Math.pow(1+r,n)+pmt*(Math.pow(1+r,n)-1)/r;};
+  const miles=[18,david.targetAge,20,25].filter((a,i,ar)=>ar.indexOf(a)===i).map(a=>({a,n:mTo(a),yr:david.birthYear+a}));
+
+  return(
+    <div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"#1B4332",marginBottom:4}}>👶 David's Legacy Fund</div>
+      <p style={{fontSize:13,color:"#555",lineHeight:1.8,marginBottom:20}}>
+        Every naira you set aside for David today is a seed for his future. This fund grows with your income, compounds over time, and will be handed to him — and his siblings — by God's grace. 🌱 <b>Billion-naira legacy, one faithful month at a time.</b>
+      </p>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:18}}>
+        <DC label="David's Birth Year">
+          <input type="number" value={david.birthYear} onChange={e=>upd("birthYear",+e.target.value)} style={{padding:"9px 12px",border:"2px solid #1B4332",borderRadius:8,fontFamily:"'DM Mono',monospace",fontSize:17,fontWeight:700,width:"100%",outline:"none"}}/>
+          <div style={{fontSize:12,color:"#888",marginTop:6}}>Current age: <b>{age} year{age!==1?"s":""} old</b></div>
+        </DC>
+        <DC label="Hand-over Age">
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+            {[18,20,21,25].map(a=>(
+              <button key={a} onClick={()=>upd("targetAge",a)} style={{padding:"7px 16px",border:"1px solid",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700,...(david.targetAge===a?{background:"#1B4332",color:"#fff",borderColor:"#1B4332"}:{background:"#fff",color:"#333",borderColor:"#D1D5DB"})}}>{a}</button>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:"#888",marginTop:6}}>{mTo(david.targetAge)} months until age {david.targetAge}</div>
+        </DC>
+        <DC label="Monthly Contribution">
+          {david.linkToIncome
+            ?<div><div style={{fontFamily:"'DM Mono',monospace",fontSize:24,fontWeight:700,color:"#1B4332"}}>{N(mc)}</div><div style={{fontSize:12,color:"#888",marginTop:6}}>{david.incPct.toFixed(2)}% of income — <b style={{color:"#16A34A"}}>auto-grows with salary ✅</b></div></div>
+            :<><input type="number" value={david.monthlyFixed} onChange={e=>upd("monthlyFixed",+e.target.value)} style={{padding:"9px 12px",border:"2px solid #1B4332",borderRadius:8,fontFamily:"'DM Mono',monospace",fontSize:17,fontWeight:700,width:"100%",outline:"none"}}/><div style={{fontSize:12,color:"#888",marginTop:6}}>Fixed — won't auto-scale</div></>
+          }
+        </DC>
+        <DC label="Auto-Scale With Income?">
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button style={{flex:1,padding:"8px",border:"1px solid",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,...(david.linkToIncome?{background:"#1B4332",color:"#fff",borderColor:"#1B4332"}:{background:"#fff",color:"#333",borderColor:"#D1D5DB"})}} onClick={()=>{upd("linkToIncome",true);upd("incPct",(mc/income)*100);notify("David's fund now auto-scales with income!");}}>✅ Auto-scale</button>
+            <button style={{flex:1,padding:"8px",border:"1px solid",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,...(!david.linkToIncome?{background:"#1B4332",color:"#fff",borderColor:"#1B4332"}:{background:"#fff",color:"#333",borderColor:"#D1D5DB"})}} onClick={()=>upd("linkToIncome",false)}>Fixed amount</button>
+          </div>
+          <div style={{fontSize:12,color:"#888",marginTop:6}}>{david.linkToIncome?"Salary goes up → David's contribution goes up automatically.":"Switch to auto-scale so the fund grows with your income."}</div>
+        </DC>
+      </div>
+
+      <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",boxShadow:"0 2px 10px rgba(0,0,0,0.07)",borderTop:"4px solid #1B4332",marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:14}}>
+          <div>
+            <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"#888",fontWeight:700}}>Total Saved So Far</div>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:34,fontWeight:700,color:"#1B4332"}}>{N(david.totalSaved)}</div>
+            <div style={{fontSize:12,color:"#888"}}>Contributing {N(mc)}/month</div>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <input type="number" placeholder="Add this month's saving..." value={add} onChange={e=>setAdd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&+add>0&&(upd("totalSaved",david.totalSaved+(+add)),setAdd(""),notify("💰 Added to David's fund!"))} style={{padding:"8px 12px",border:"2px solid #1B4332",borderRadius:8,fontSize:14,outline:"none",width:200}}/>
+            <button onClick={()=>{if(+add>0){upd("totalSaved",david.totalSaved+(+add));setAdd("");notify("💰 Added to David's fund!");}}} style={{padding:"9px 20px",background:"#1B4332",color:"#fff",border:"none",borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer"}}>+ Add</button>
+            <button onClick={()=>{if(window.confirm("Reset total to ₦0?"))upd("totalSaved",0);}} style={{padding:"9px 12px",background:"transparent",border:"1px solid #E5E7EB",color:"#DC2626",borderRadius:8,cursor:"pointer",fontSize:13}}>Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:"#1B4332",marginBottom:8}}>📈 Growth Projections</div>
+      <p style={{fontSize:12,color:"#888",marginBottom:12}}>Based on {N(mc)}/month starting from {N(david.totalSaved)} saved. Returns are estimates.</p>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,marginBottom:12}}>
+          <thead>
+            <tr style={{background:"#1B4332"}}>
+              {["Age / Year","Months Left","Save Only (0%)","10%/yr Returns","15%/yr Returns 🔥"].map((h,i)=>(
+                <th key={i} style={{padding:"11px 14px",color:"#fff",fontWeight:700,fontSize:12,textAlign:i>1?"right":"left"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {miles.map((m,i)=>(
+              <tr key={i} style={{background:i%2===0?"#F9FAF9":"#fff"}}>
+                <td style={{padding:"11px 14px",fontWeight:700}}>Age {m.a}<br/><span style={{fontSize:11,color:"#888",fontWeight:400}}>({m.yr})</span></td>
+                <td style={{padding:"11px 14px",color:"#888",textAlign:"center"}}>{m.n} mos</td>
+                <td style={{padding:"11px 14px",textAlign:"right",color:"#6B7280",fontFamily:"'DM Mono',monospace"}}>{N(Math.round(fv(david.totalSaved,mc,0,m.n)))}</td>
+                <td style={{padding:"11px 14px",textAlign:"right",color:"#059669",fontFamily:"'DM Mono',monospace"}}>{N(Math.round(fv(david.totalSaved,mc,0.10,m.n)))}</td>
+                <td style={{padding:"11px 14px",textAlign:"right",color:"#1B4332",fontFamily:"'DM Mono',monospace",fontWeight:700}}>{N(Math.round(fv(david.totalSaved,mc,0.15,m.n)))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px 16px",fontSize:13,color:"#166534",lineHeight:1.9}}>
+        🙏 <b>By God's Grace:</b> At 15%/yr, David's fund at age 20 could be <b>{N(Math.round(fv(david.totalSaved,mc,0.15,mTo(20))))}</b>. For each new sibling, add a row in the Budget Sheet — same discipline, multiplied blessing. 🌟<br/><br/>
+        💡 <b>Grow David's fund:</b> Open a dedicated account in his name. Try <b>Risevest</b> (dollar assets, 10–18%/yr), <b>Bamboo</b> (US stocks), <b>Cowrywise</b> (mutual funds), or a <b>fixed deposit</b> at your bank. Never mix with household funds.
+      </div>
+    </div>
+  );
+}
+
+function GoalsTab({goals,setGoals,notify}){
+  const [aS,setAS]=useState(""); const [aE,setAE]=useState(""); const [aI,setAI]=useState("");
+  const upd=(k,v)=>setGoals(g=>({...g,[k]:v}));
+  const sPct=Math.min(100,Math.round(((goals.schoolFees||0)/300000)*100));
+  const eT=goals.emergTarget||200000;
+  const ePct=Math.min(100,Math.round(((goals.emergency||0)/eT)*100));
+
+  return(
+    <div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"#1B4332",marginBottom:16}}>🎯 Savings Goals Tracker</div>
+
+      <GCard color="#B45309" title="🎒 Son's School Fees Pot" sub="Save ₦100k/month → ₦300k ready every term (every 3 months)">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",flexWrap:"wrap",gap:8}}>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:28,fontWeight:700,color:"#B45309"}}>{N(goals.schoolFees||0)}</div>
+          <div style={{fontSize:12,color:"#888"}}>of ₦300,000 per term · <b>Terms paid: {goals.termsPaid||0}</b></div>
+        </div>
+        <PBar p={sPct} c="#B45309"/>
+        <div style={{fontSize:12,color:"#888",marginTop:4}}>{sPct}% · {N(Math.max(0,300000-(goals.schoolFees||0)))} still needed</div>
+        {sPct>=100&&<div style={{background:"#FEF3C7",padding:"10px 14px",borderRadius:8,fontSize:13,color:"#92400E",margin:"10px 0",display:"flex",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          🎉 Target reached! Pay the term fees then reset.
+          <button onClick={()=>{upd("schoolFees",0);upd("termsPaid",(goals.termsPaid||0)+1);notify("✅ Term paid! Pot reset for next term.");}} style={{padding:"5px 14px",background:"#B45309",color:"#fff",border:"none",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer"}}>Mark Paid & Reset</button>
+        </div>}
+        <GoalIn v={aS} onChange={setAS} c="#B45309" l="Add to School Pot" onAdd={()=>{if(+aS>0){upd("schoolFees",(goals.schoolFees||0)+(+aS));setAS("");notify("School pot updated!");}}}/>
+      </GCard>
+
+      <GCard color="#4F46E5" title="🛡️ Emergency Fund" sub={`Target: ${N(eT)} — your 3-month financial cushion`}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",flexWrap:"wrap",gap:8}}>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:28,fontWeight:700,color:"#4F46E5"}}>{N(goals.emergency||0)}</div>
+          <div style={{fontSize:12,color:"#888"}}>of {N(eT)}</div>
+        </div>
+        <PBar p={ePct} c="#4F46E5"/>
+        <div style={{fontSize:12,color:"#888",marginTop:4}}>{ePct}% · {N(Math.max(0,eT-(goals.emergency||0)))} needed</div>
+        {ePct>=100&&<div style={{background:"#EEF2FF",padding:"10px 14px",borderRadius:8,fontSize:13,color:"#3730A3",marginTop:8}}>🎉 Emergency fund complete! You have real peace of mind. Invest the extra ₦20k/month.</div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+          <GoalIn v={aE} onChange={setAE} c="#4F46E5" l="Add to Emergency Pot" onAdd={()=>{if(+aE>0){upd("emergency",(goals.emergency||0)+(+aE));setAE("");notify("Emergency fund updated!");}}}/>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:12,color:"#888"}}>Change target:</span>
+            <input type="number" value={eT} onChange={e=>{if(+e.target.value>0)upd("emergTarget",+e.target.value);}} style={{width:120,padding:"5px 10px",border:"1px solid #D1D5DB",borderRadius:7,fontSize:13,outline:"none"}}/>
+          </div>
+        </div>
+      </GCard>
+
+      <GCard color="#16A34A" title="📈 Investment Tracker" sub="Every ₦ invested today is money working for you tomorrow">
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:14}}>
+          {[{l:"Total Invested",v:N(goals.investment||0),c:"#16A34A"},{l:"Months Active",v:String(goals.investMonths||0),c:"#059669"},{l:"Est. at 15%/yr",v:N(Math.round((goals.investment||0)*1.15)),c:"#D97706"}].map((s,i)=>(
+            <div key={i} style={{background:"#F0FDF4",padding:"10px 14px",borderRadius:8,textAlign:"center"}}>
+              <div style={{fontSize:11,color:"#555",marginBottom:4}}>{s.l}</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:15,fontWeight:700,color:s.c}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        <GoalIn v={aI} onChange={setAI} c="#16A34A" l="Record This Month's Investment" onAdd={()=>{if(+aI>0){upd("investment",(goals.investment||0)+(+aI));upd("investMonths",(goals.investMonths||0)+1);setAI("");notify("💹 Investment recorded!");}}}/>
+        <div style={{background:"#F0FDF4",padding:"12px 14px",borderRadius:8,marginTop:12,fontSize:12,color:"#166534",lineHeight:1.85}}>
+          💡 <b>Recommended:</b> Risevest (dollar, 10–18%/yr), Bamboo (US stocks), Cowrywise (mutual funds), PiggyVest, treasury bills (15–20%/yr via your bank). <b>Automate on payday — invest before you spend.</b>
+        </div>
+      </GCard>
+    </div>
+  );
+}
+
+function TipsTab(){
+  const tips=[
+    {cat:"🛒 Food & Groceries",color:"#059669",items:["Buy staples (rice, beans, garri, palm oil) in bulk at open markets — save 20–30% vs. supermarket.","Plan weekly meals and write a list before shopping. Impulse buying is the biggest grocery budget killer.","Use Mile 12, Balogun, or your nearest open market for fresh produce.","Cook in batches on weekends — saves time, gas, and daily cooking costs."]},
+    {cat:"📱 Data & Communication",color:"#2563EB",items:["Switch to 30-day bundles — far more GB per naira than weekly plans.","Use WhatsApp and Telegram for calls to reduce airtime spending.","Compare MTN, Airtel, Glo, 9mobile monthly — deals change and you can always switch."]},
+    {cat:"📈 Investment",color:"#16A34A",items:["Start now — ₦40k/month at 15%/yr for 10 years = over ₦8 million.","Automate investment on payday. Invest before you spend, not with what's left.","Keep some in naira (treasury bills, FDs) and some in dollar assets (Risevest) to protect against naira devaluation.","As income grows, raise your investment % — target 15–20% of income eventually."]},
+    {cat:"🛡️ Emergency Fund",color:"#4F46E5",items:["Target ₦200,000 — covers 3 months of essential living if income stops suddenly.","Keep it in a separate account. Out of sight, out of spend.","Only use it for true emergencies: serious illness, job loss, urgent home repair.","Replenish it immediately after any withdrawal."]},
+    {cat:"🎒 School Fees Strategy",color:"#B45309",items:["₦100k/month = ₦300k every 3 months — pay school fees without any stress.","Keep it in a PiggyVest vault or separate account so you're never tempted.","Ask the school about early-payment discounts — some offer 5–10% off.","As your son moves to higher classes, fees will increase — plan to raise this amount yearly."]},
+    {cat:"👶 David's Legacy",color:"#1B4332",items:["Open a dedicated account or investment in David's name — completely separate from household funds.","Enable auto-scale so his fund grows automatically when your income increases.","Invest in Risevest or Bamboo for dollar-denominated growth — beats naira inflation.","For each new child, add a new row in the Budget Sheet — same principle, new legacy, multiplied blessing."]},
+    {cat:"🙏 Faith & Finances",color:"#7C3AED",items:["Tithe first — it's already built in at 10% of income and auto-recalculates.","Your giving to both mothers (₦30k/month) is an investment in family goodwill and future.",  "Review your budget every 3 months and give thanks for what God has provided."]},
+    {cat:"💡 General Money Wisdom",color:"#6B7280",items:["Never borrow to fund lifestyle expenses. Only borrow for assets that appreciate.","Talk to your wife about the budget monthly. Couples who budget together, build together.","As income increases, resist lifestyle inflation — save and invest the extra first.","Every ₦ left in the buffer at month-end? Move it to investment, not lifestyle.","In 12 months of consistent ₦40k investing, you'll have ₦480k+ working for you. That is real power."]},
+  ];
+  return(
+    <div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"#1B4332",marginBottom:4}}>💡 Smart Financial Tips</div>
+      <p style={{fontSize:13,color:"#555",lineHeight:1.7,marginBottom:18}}>Nigeria-specific, practical guidance tailored to your budget and family situation.</p>
+      {tips.map((s,i)=>(
+        <div key={i} style={{background:"#fff",borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 8px rgba(0,0,0,0.06)",marginBottom:12,borderLeft:`5px solid ${s.color}`}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:s.color,marginBottom:10}}>{s.cat}</div>
+          {s.items.map((tip,j)=>(
+            <div key={j} style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:8,paddingBottom:8,borderBottom:"1px solid #f5f5f5"}}>
+              <span style={{color:s.color,fontSize:16,flexShrink:0,lineHeight:1.4}}>→</span>
+              <span style={{fontSize:13,color:"#333",lineHeight:1.7}}>{tip}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// MICRO COMPONENTS
+function CInp({val,onChange,onDone,type="text",style={}}){
+  return <input autoFocus type={type} value={val} style={{padding:"4px 8px",border:"2px solid #1B4332",borderRadius:6,fontSize:13,outline:"none",width:150,...style}} onChange={e=>onChange(e.target.value)} onBlur={onDone} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab")onDone();if(e.key==="Escape")onDone();}}/>;
+}
+function Pill({l,v,c}){
+  return <div style={{padding:"4px 12px",background:"rgba(255,255,255,0.1)",borderRadius:8}}>
+    <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:.8}}>{l}</div>
+    <div style={{fontFamily:"'DM Mono',monospace",fontSize:14,fontWeight:700,color:c}}>{v}</div>
+  </div>;
+}
+function DC({label,children}){
+  return <div style={{background:"#F9FAF9",borderRadius:10,padding:"14px 16px",border:"1px solid #E5E7EB"}}>
+    <div style={{fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>{label}</div>
+    {children}
+  </div>;
+}
+function GCard({color,title,sub,children}){
+  return <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",boxShadow:"0 2px 10px rgba(0,0,0,0.07)",marginBottom:14,borderTop:`4px solid ${color}`}}>
+    <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:"#1a1a1a",marginBottom:2}}>{title}</div>
+    <div style={{fontSize:12,color:"#888",marginBottom:12}}>{sub}</div>
+    {children}
+  </div>;
+}
+function PBar({p,c}){
+  return <div style={{height:10,background:"#E5E7EB",borderRadius:99,overflow:"hidden",margin:"10px 0 4px"}}>
+    <div style={{height:"100%",width:`${p}%`,background:c,borderRadius:99,transition:"width .5s ease"}}/>
+  </div>;
+}
+function GoalIn({v,onChange,onAdd,c,l}){
+  return <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginTop:10}}>
+    <input type="number" placeholder="₦ Amount..." value={v} onChange={e=>onChange(e.target.value)} onKeyDown={e=>e.key==="Enter"&&onAdd()} style={{padding:"7px 12px",border:"1px solid #D1D5DB",borderRadius:8,fontSize:13,outline:"none",width:150}}/>
+    <button onClick={onAdd} style={{padding:"7px 18px",background:c,color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>{l}</button>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
