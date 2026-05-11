@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;600&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script><script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#EEEBE3;font-family:'DM Sans',sans-serif;min-height:100vh}
@@ -19,7 +19,28 @@ input[type=number]::-webkit-inner-spin-button{opacity:.4}
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
+<script type="text/babel"> 
+const SUPABASE_URL = "https://jrpbrdbyobhlveyzqn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_rCUIVuna1kZ5hpPc4hpFxQ_XUniGfWI";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+(async () => {
+  const { data, error } = await supabaseClient
+    .from("budget_data")
+    .select("*")
+    .limit(1);
+
+  if (error) {
+    console.error("❌ Supabase error:", error);
+  } else {
+    console.log("✅ Supabase connected:", data);
+  }
+})();
+
 const {useState,useEffect}=React;
 const N=v=>`₦${Number(v||0).toLocaleString('en-NG')}`;
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
